@@ -11,7 +11,8 @@ type Subscribable interface {
 }
 
 type Broadcaster interface {
-	Send(int, []byte) int
+	Send(int, []byte) error
+	Flood(int, []byte) int
 }
 
 type Hub interface {
@@ -48,12 +49,29 @@ func (bh *ByteHub) Unsubscribe(id int) {
 	delete(bh.subscribers, id)
 }
 
-func (bh *ByteHub) Send(sender int, msg []byte) (skipped int) {
+func (bh *ByteHub) Send(to int, msg []byte) error {
+	bh.RLock()
+	defer bh.RUnlock()
+
+	ch, ok := bh.subscribers[to]
+	if !ok {
+		return errors.New("subscriber does not exist")
+	}
+
+	select {
+	case ch <- msg:
+		return nil
+	default:
+		return errors.New("subscriber not listening")
+	}
+}
+
+func (bh *ByteHub) Flood(from int, msg []byte) (skipped int) {
 	bh.RLock()
 	defer bh.RUnlock()
 
 	for id, ch := range bh.subscribers {
-		if id != sender {
+		if id != from {
 			select {
 			case ch <- msg:
 			default:
