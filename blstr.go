@@ -82,3 +82,17 @@ func (bh *ByteHub) Flood(from int, msg []byte) (skipped int) {
 
 	return
 }
+
+func (bh *ByteHub) Count() int {
+	bh.RLock()
+	defer bh.RUnlock()
+
+	return len(bh.subscribers)
+}
+
+func (bh *ByteHub) Reset() {
+	bh.Lock()
+	defer bh.Unlock()
+
+	bh.subscribers = make(map[int]chan<- []byte)
+}

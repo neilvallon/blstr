@@ -143,3 +143,32 @@ func TestUnicast(t *testing.T) {
 		t.Error("send should error for non-existent subscriber")
 	}
 }
+
+func TestCount(t *testing.T) {
+	bb := New()
+
+	for i := 1; i <= 10; i++ {
+		bb.Subscribe(i, make(chan []byte))
+		if n := bb.Count(); n != i {
+			t.Log("count returns incorrect subscriber number")
+			t.Errorf("got: %d - expected: %d", n, i)
+		}
+	}
+}
+
+func TestReset(t *testing.T) {
+	bb := New()
+
+	for i := 1; i <= 10; i++ {
+		bb.Subscribe(i, make(chan []byte))
+	}
+
+	if len(bb.subscribers) != 10 {
+		t.Fatal("10 subscribers should exist on hub to start test")
+	}
+
+	bb.Reset()
+	if len(bb.subscribers) != 0 {
+		t.Fatal("hub should have no subscribers after reset")
+	}
+}
