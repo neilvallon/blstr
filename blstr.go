@@ -1,3 +1,13 @@
+// Package blstr (blaster? blast string?) is an ill-named library
+// for easily setting up best-effort broadcast communication between
+// goroutines.
+//
+// Synchronization and consistency is traded for speed and
+// predictability of send operations.
+//
+// The best use case is where perfect consistency may not be
+// necessary and some message loss on slow receivers is more tolerable
+// than choking upstream senders.
 package blstr
 
 import (
@@ -5,30 +15,41 @@ import (
 	"sync"
 )
 
+// Subscribable provides methods for observing data on a hub.
 type Subscribable interface {
 	Subscribe(int, chan<- []byte) error
 	Unsubscribe(int)
 }
 
+// Broadcaster provides push methods for sending data.
 type Broadcaster interface {
 	Send(int, []byte) error
 	Flood(int, []byte) int
 }
 
+// Hub is the combination of sender and receiver functions.
 type Hub interface {
 	Subscribable
 	Broadcaster
 }
 
+// ByteHub is a Hub implementation with helper functions for
+// managing a set of subscribers.
 type ByteHub struct {
 	subscribers map[int]chan<- []byte
 	sync.RWMutex
 }
 
+// New returns a new ByteHub
 func New() *ByteHub {
 	return &ByteHub{subscribers: make(map[int]chan<- []byte)}
 }
 
+// Subscribe to be notified when broadcast events occur on the hub.
+//
+// Messages can be dropped if receiver stops listening, or if messages
+// arrive faster than they can be consumed.
+// Channels can be buffered to mitigate this to some extent.
 func (bh *ByteHub) Subscribe(id int, ch chan<- []byte) error {
 	bh.Lock()
 	defer bh.Unlock()
@@ -42,6 +63,7 @@ func (bh *ByteHub) Subscribe(id int, ch chan<- []byte) error {
 	return nil
 }
 
+// Unsubscribe tries to remove the subscription by ID if it exists.
 func (bh *ByteHub) Unsubscribe(id int) {
 	bh.Lock()
 	defer bh.Unlock()
@@ -49,6 +71,11 @@ func (bh *ByteHub) Unsubscribe(id int) {
 	delete(bh.subscribers, id)
 }
 
+// Send provides unicast communication over the hub.
+//
+// An attempt is made to send a message to the specified subscriber.
+// Errors are returned if the subscriber could not be found or
+// is unable to receive the message.
 func (bh *ByteHub) Send(to int, msg []byte) error {
 	bh.RLock()
 	defer bh.RUnlock()
@@ -66,6 +93,15 @@ func (bh *ByteHub) Send(to int, msg []byte) error {
 	}
 }
 
+// Flood provides broadcast communication over the hub.
+//
+// All listening subscribers will receive the message provided.
+// The from field is usually set with the sender ID to be excluded
+// from the broadcast. This allows subscribers to send without
+// having to filter out their own messages.
+//
+// A count of skipped subscribers (excluding the sender) that are
+// unable to receive the message is returned.
 func (bh *ByteHub) Flood(from int, msg []byte) (skipped int) {
 	bh.RLock()
 	defer bh.RUnlock()
@@ -83,6 +119,7 @@ func (bh *ByteHub) Flood(from int, msg []byte) (skipped int) {
 	return
 }
 
+// Count returns the current number of subscriptions to the hub.
 func (bh *ByteHub) Count() int {
 	bh.RLock()
 	defer bh.RUnlock()
@@ -90,6 +127,7 @@ func (bh *ByteHub) Count() int {
 	return len(bh.subscribers)
 }
 
+// Reset removes all subscriptions from the hub and allows it to be reused.
 func (bh *ByteHub) Reset() {
 	bh.Lock()
 	defer bh.Unlock()
