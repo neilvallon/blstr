@@ -15,26 +15,7 @@ import (
 	"sync"
 )
 
-// Subscribable provides methods for observing data on a hub.
-type Subscribable interface {
-	Subscribe(int, chan<- []byte) error
-	Unsubscribe(int)
-}
-
-// Broadcaster provides push methods for sending data.
-type Broadcaster interface {
-	Send(int, []byte) error
-	Flood(int, []byte) int
-}
-
-// Hub is the combination of sender and receiver functions.
-type Hub interface {
-	Subscribable
-	Broadcaster
-}
-
-// ByteHub is a Hub implementation with helper functions for
-// managing a set of subscribers.
+// ByteHub implements a multiuser communication channel.
 type ByteHub struct {
 	subscribers map[int]chan<- []byte
 	sync.RWMutex
