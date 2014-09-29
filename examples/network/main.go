@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"sync"
+	"time"
 
 	"log"
 
@@ -26,7 +27,9 @@ type Tree []Layer
 // main builds a tree of hubs and atempts to send a message between
 // the two furthest leaf nodes.
 func main() {
+	t1 := time.Now()
 	tree := BuildTree(4, 4)
+	log.Println("tree Generated in", time.Now().Sub(t1))
 
 	// Get bottom layer of tree
 	edge := tree[len(tree)-1]
@@ -39,12 +42,14 @@ func main() {
 	ch := make(chan []byte, 1)
 	left.hub.Subscribe(-1, ch)
 
+	t2 := time.Now()
+
 	// Send on right
 	right.hub.Flood(-1, []byte("Hello, World!"))
 
 	// Wait for propogation and print
 	msg := <-ch
-	log.Printf("%s\n", msg)
+	log.Printf("%q propagated in %s\n", msg, time.Now().Sub(t2))
 }
 
 func BuildTree(layers, fanout int) Tree {
