@@ -2,7 +2,7 @@ package main
 
 import (
 	"math"
-	"time"
+	"sync"
 
 	"log"
 
@@ -27,9 +27,6 @@ type Tree []Layer
 // the two furthest leaf nodes.
 func main() {
 	tree := BuildTree(4, 4)
-
-	// Give time for subscriptions to start up
-	time.Sleep(50 * time.Millisecond)
 
 	// Get bottom layer of tree
 	edge := tree[len(tree)-1]
@@ -57,7 +54,10 @@ func BuildTree(layers, fanout int) Tree {
 	// Set root 0 Node
 	accum[0] = Node{hub: blstr.New()}
 
-	buildTree(accum[0], layers, fanout, accum)
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	buildTree(accum[0], layers, fanout, accum, &wg)
 
 	// Form final tree by slicing out layers from the accumulator
 	tree := make(Tree, layers)
@@ -73,7 +73,7 @@ func totalNodes(layers, fanout int) int {
 	return int(math.Pow(float64(fanout), float64(layers))-1) / (fanout - 1)
 }
 
-func buildTree(p Node, layers, fanout int, accum Layer) {
+func buildTree(p Node, layers, fanout int, accum Layer, wg *sync.WaitGroup) {
 	if layers == 1 {
 		accum[p.id] = p
 		return
@@ -86,20 +86,22 @@ func buildTree(p Node, layers, fanout int, accum Layer) {
 		}
 
 		// Forward messages between parent and new node
-		go connect(&p, &n)
-		go connect(&n, &p)
+		wg.Add(2)
+		go connect(&p, &n, wg)
+		go connect(&n, &p, wg)
 
 		accum[n.id] = n
 
 		// make subtree bellow new node
-		buildTree(n, layers-1, fanout, accum)
+		buildTree(n, layers-1, fanout, accum, wg)
 	}
 }
 
-func connect(n1, n2 *Node) {
+func connect(n1, n2 *Node, wg *sync.WaitGroup) {
 	ch := make(chan []byte, 1)
 	n2.hub.Subscribe(n1.id, ch)
 
+	wg.Done()
 	for msg := range ch {
 		log.Printf("node %d forwarding to node %d", n2.id, n1.id)
 		n1.hub.Flood(n2.id, msg)
