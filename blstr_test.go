@@ -2,6 +2,7 @@ package blstr
 
 import (
 	"bytes"
+	"sync"
 	"testing"
 )
 
@@ -170,5 +171,46 @@ func TestReset(t *testing.T) {
 	bb.Reset()
 	if len(bb.subscribers) != 0 {
 		t.Fatal("hub should have no subscribers after reset")
+	}
+}
+
+func BenchmarkFloodThroughput_1(b *testing.B)      { testFloodThroughput(1, b.N) }
+func BenchmarkFloodThroughput_10(b *testing.B)     { testFloodThroughput(10, b.N) }
+func BenchmarkFloodThroughput_100(b *testing.B)    { testFloodThroughput(100, b.N) }
+func BenchmarkFloodThroughput_1000(b *testing.B)   { testFloodThroughput(1000, b.N) }
+func BenchmarkFloodThroughput_10000(b *testing.B)  { testFloodThroughput(10000, b.N) }
+func BenchmarkFloodThroughput_100000(b *testing.B) { testFloodThroughput(100000, b.N) }
+
+func testFloodThroughput(subCount, msgCount int) {
+	hub := New()
+
+	var drainWG sync.WaitGroup
+	defer drainWG.Wait()
+
+	// make subscription
+	for i := 0; i < subCount; i++ {
+		// channels are buffered to the number of sends
+		// test requires all sends to succeed to pass and this is
+		// the only way to not skip any subscribers.
+		// Another test may kill users at the end and ignore
+		// skipps for a more 'real world' test.
+		ch := make(chan []byte, msgCount)
+		if err := hub.Subscribe(i, ch); err != nil {
+			panic(err)
+		}
+
+		// Start receiver
+		drainWG.Add(1)
+		go func(ch chan []byte) {
+			defer drainWG.Done()
+			for n := 0; n < msgCount; n++ {
+				<-ch
+			}
+		}(ch)
+	}
+
+	msg := []byte("This is a string that doesn't matter since a slice is what's being sent not the array.")
+	for i := 0; i < msgCount; i++ {
+		go hub.Flood(-1, msg)
 	}
 }
