@@ -174,6 +174,29 @@ func TestReset(t *testing.T) {
 	}
 }
 
+func TestLockRaces(t *testing.T) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	hub := New()
+	defer hub.Reset()
+
+	caller := func(id int) {
+		defer wg.Done()
+
+		ch := make(chan []byte, 5)
+		hub.Subscribe(id, ch)
+		hub.Count()
+		hub.Send(id-1, []byte("test1"))
+		hub.Flood(id, []byte("test2"))
+		hub.Unsubscribe(id)
+	}
+
+	wg.Add(2)
+	go caller(1)
+	go caller(2)
+}
+
 func BenchmarkFloodThroughput_1(b *testing.B)      { testFloodThroughput(1, b.N) }
 func BenchmarkFloodThroughput_10(b *testing.B)     { testFloodThroughput(10, b.N) }
 func BenchmarkFloodThroughput_100(b *testing.B)    { testFloodThroughput(100, b.N) }
