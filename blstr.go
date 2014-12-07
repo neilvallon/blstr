@@ -33,23 +33,23 @@ func New() *ByteHub {
 // Channels can be buffered to mitigate this to some extent.
 func (bh *ByteHub) Subscribe(id int, ch chan<- []byte) error {
 	bh.Lock()
-	defer bh.Unlock()
 
 	if _, ok := bh.subscribers[id]; ok {
+		bh.Unlock()
 		return errors.New("subscriber already exists")
 	}
 
 	bh.subscribers[id] = ch
 
+	bh.Unlock()
 	return nil
 }
 
 // Unsubscribe tries to remove the subscription by ID if it exists.
 func (bh *ByteHub) Unsubscribe(id int) {
 	bh.Lock()
-	defer bh.Unlock()
-
 	delete(bh.subscribers, id)
+	bh.Unlock()
 }
 
 // Send provides unicast communication over the hub.
@@ -57,21 +57,23 @@ func (bh *ByteHub) Unsubscribe(id int) {
 // An attempt is made to send a message to the specified subscriber.
 // Errors are returned if the subscriber could not be found or
 // is unable to receive the message.
-func (bh *ByteHub) Send(to int, msg []byte) error {
+func (bh *ByteHub) Send(to int, msg []byte) (err error) {
 	bh.RLock()
-	defer bh.RUnlock()
 
 	ch, ok := bh.subscribers[to]
 	if !ok {
+		bh.RUnlock()
 		return errors.New("subscriber does not exist")
 	}
 
 	select {
 	case ch <- msg:
-		return nil
 	default:
-		return errors.New("subscriber not listening")
+		err = errors.New("subscriber not listening")
 	}
+
+	bh.RUnlock()
+	return
 }
 
 // Flood provides broadcast communication over the hub.
@@ -85,7 +87,6 @@ func (bh *ByteHub) Send(to int, msg []byte) error {
 // unable to receive the message is returned.
 func (bh *ByteHub) Flood(from int, msg []byte) (skipped int) {
 	bh.RLock()
-	defer bh.RUnlock()
 
 	for id, ch := range bh.subscribers {
 		if id != from {
@@ -97,21 +98,21 @@ func (bh *ByteHub) Flood(from int, msg []byte) (skipped int) {
 		}
 	}
 
+	bh.RUnlock()
 	return
 }
 
 // Count returns the current number of subscriptions to the hub.
 func (bh *ByteHub) Count() int {
 	bh.RLock()
-	defer bh.RUnlock()
-
-	return len(bh.subscribers)
+	l := len(bh.subscribers)
+	bh.RUnlock()
+	return l
 }
 
 // Reset removes all subscriptions from the hub and allows it to be reused.
 func (bh *ByteHub) Reset() {
 	bh.Lock()
-	defer bh.Unlock()
-
 	bh.subscribers = make(map[int]chan<- []byte)
+	bh.Unlock()
 }
