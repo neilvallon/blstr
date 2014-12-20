@@ -8,7 +8,7 @@
 // The best use case is where perfect consistency may not be
 // necessary and some message loss on slow receivers is more tolerable
 // than choking upstream senders.
-package blstr
+package blstr // import "vallon.me/blstr"
 
 import (
 	"errors"
